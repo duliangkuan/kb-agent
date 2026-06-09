@@ -14,6 +14,9 @@
 
 </div>
 
+> 📌 本仓库**专为「中科院自动化所 · Agent 开发工程师初试」建立**。
+> 仓库地址：https://github.com/duliangkuan/kb-agent
+
 > 核心亮点：**HTTP 接口与 MCP 工具共享同一个检索内核**——一份检索逻辑，既给网页用，也给 Agent 用。
 
 <div align="center">

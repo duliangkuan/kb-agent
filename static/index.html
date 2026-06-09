@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>知识库 Agent · 语义检索 + 流式返回</title>
+<style>
+  :root{
+    --bg:#f5f6f8; --card:#ffffff; --ink:#1b1f24; --ink2:#4b535c; --muted:#838a94;
+    --line:#e7e9ec; --line2:#d6dade; --brand:#D97757; --brand-d:#bf5d3a; --tint:#fbf0ea;
+    --radius:14px; --shadow:0 1px 2px rgba(16,24,40,.05), 0 4px 16px rgba(16,24,40,.05);
+  }
+  *{box-sizing:border-box;}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:16px/1.72 -apple-system,"Segoe UI","Microsoft YaHei",system-ui,sans-serif;
+       -webkit-font-smoothing:antialiased;}
+
+  /* 顶栏 */
+  header{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.88);backdrop-filter:blur(8px);
+         border-bottom:1px solid var(--line);padding:15px 32px;display:flex;align-items:center;
+         justify-content:space-between;gap:20px;}
+  .brand{display:flex;align-items:center;gap:12px;}
+  .dot{width:13px;height:13px;border-radius:4px;background:var(--brand);flex:0 0 auto;
+       box-shadow:0 0 0 4px var(--tint);}
+  header h1{margin:0;font-size:20px;font-weight:700;letter-spacing:.2px;}
+  header .sub{margin:2px 0 0;color:var(--ink2);font-size:14.5px;}
+  header .pipe{color:var(--muted);font-size:13px;text-align:right;}
+  @media(max-width:880px){header .pipe{display:none;}}
+
+  /* 布局 */
+  .wrap{max-width:1180px;margin:24px auto;padding:0 32px;display:grid;
+        grid-template-columns:350px 1fr;gap:22px;align-items:start;}
+  @media(max-width:880px){.wrap{grid-template-columns:1fr;}}
+  .col-main{display:flex;flex-direction:column;gap:22px;}
+
+  /* 卡片 */
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+        box-shadow:var(--shadow);padding:20px 20px 22px;}
+  .card h2{margin:0 0 16px;font-size:16px;font-weight:700;color:var(--ink);
+           display:flex;align-items:center;gap:9px;letter-spacing:.3px;}
+  .card h2::before{content:"";width:4px;height:16px;border-radius:2px;background:var(--brand);}
+  .card h2 .tag{margin-left:auto;font-weight:500;color:var(--muted);font-size:13.5px;}
+
+  /* 控件 */
+  input,textarea{width:100%;background:#fff;border:1px solid var(--line2);color:var(--ink);
+         border-radius:10px;padding:11px 13px;font-size:15.5px;font-family:inherit;outline:none;
+         transition:border-color .15s, box-shadow .15s;}
+  input::placeholder,textarea::placeholder{color:#aeb4bc;}
+  input:focus,textarea:focus{border-color:var(--brand);box-shadow:0 0 0 3px var(--tint);}
+  textarea{min-height:84px;resize:vertical;}
+  button{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:11px 18px;
+         font-size:15.5px;font-weight:600;cursor:pointer;transition:background .15s;}
+  button:hover{background:var(--brand-d);}
+  button.ghost{background:#f1f2f4;color:var(--ink2);font-weight:500;}
+  button.ghost:hover{background:#e7e9ec;}
+  button.mini{padding:6px 12px;font-size:13.5px;border-radius:8px;}
+  .row{display:flex;gap:10px;}
+  .stack>*+*{margin-top:11px;}
+  .divider{height:1px;background:var(--line);margin:17px 0;border:0;}
+  .hint{color:var(--muted);font-size:14px;}
+
+  /* 拖拽上传区 */
+  .drop{border:2px dashed var(--line2);border-radius:12px;padding:24px 16px;text-align:center;
+        cursor:pointer;transition:border-color .15s, background .15s;background:#fcfcfd;}
+  .drop:hover,.drop.over{border-color:var(--brand);background:var(--tint);}
+  .drop.over{border-style:solid;}
+  .drop .ic{font-size:30px;line-height:1;}
+  .drop .dz-main{font-size:15.5px;color:var(--ink);font-weight:700;margin-top:9px;}
+  .drop .dz-sub{font-size:13px;color:var(--muted);margin-top:5px;}
+  .drop .dz-file{font-size:14px;color:var(--brand-d);font-weight:600;margin-top:10px;word-break:break-all;}
+
+  /* 知识库 / 文档列表项 */
+  .item{display:flex;justify-content:space-between;align-items:center;gap:8px;
+        padding:11px 13px;border:1px solid var(--line);border-radius:10px;margin-bottom:9px;
+        cursor:pointer;transition:border-color .15s, background .15s;}
+  .item:hover{background:#fafbfc;}
+  .item.active{border-color:var(--brand);background:var(--tint);}
+  .item .nm{font-weight:600;font-size:15px;color:var(--ink);}
+  .item .meta{color:var(--muted);font-size:13.5px;margin-top:3px;}
+
+  /* 检索区 */
+  .search-row{display:flex;gap:10px;}
+  .search-row input{font-size:17px;padding:13px 16px;}
+  .search-row button{flex:0 0 auto;padding:13px 26px;font-size:16px;}
+  .scope{margin-top:11px;display:flex;align-items:center;gap:8px;color:var(--ink2);font-size:14.5px;}
+  .scope input{width:auto;transform:scale(1.1);}
+  .field{margin-top:20px;}
+  .field-label{font-size:13.5px;font-weight:700;color:var(--ink2);text-transform:uppercase;
+               letter-spacing:.5px;margin-bottom:9px;}
+
+  /* 命中来源 */
+  .src{border:1px solid var(--line);border-left:3px solid var(--brand);border-radius:0 10px 10px 0;
+       padding:12px 14px;margin-bottom:11px;background:#fcfcfd;}
+  .src-h{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:6px;}
+  .src-t{font-weight:600;font-size:15.5px;color:var(--ink);}
+  .pill{flex:0 0 auto;background:var(--tint);color:var(--brand-d);font-size:13px;font-weight:600;
+        padding:3px 10px;border-radius:999px;white-space:nowrap;}
+  .src-body{font-size:14.5px;color:var(--ink2);line-height:1.75;}
+  .src-body mark{background:#ffe9b8;color:#7a5200;padding:0 2px;border-radius:3px;}
+
+  /* 回答 */
+  #answer{white-space:pre-wrap;line-height:1.85;font-size:16.5px;color:var(--ink);
+          background:#fbfbfc;border:1px solid var(--line);border-radius:12px;padding:18px 20px;
+          min-height:92px;}
+  .blink::after{content:"▋";animation:b 1s steps(1) infinite;color:var(--brand);margin-left:1px;}
+  @keyframes b{50%{opacity:0;}}
+  .empty{color:var(--muted);font-size:14.5px;}
+
+  /* 折叠面板 */
+  details{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);
+          box-shadow:var(--shadow);padding:0 20px;}
+  details summary{cursor:pointer;padding:17px 0;font-size:15.5px;font-weight:700;color:var(--ink);
+                  list-style:none;outline:none;display:flex;align-items:center;gap:8px;}
+  details summary::-webkit-details-marker{display:none;}
+  details summary::before{content:"▸";color:var(--brand);font-size:13px;transition:transform .15s;}
+  details[open] summary::before{transform:rotate(90deg);}
+  details .inner{padding:0 0 18px;font-size:15px;color:var(--ink2);line-height:1.9;}
+  ol.steps{padding-left:22px;margin:6px 0;}
+  ol.steps li{margin:7px 0;}
+  pre.code{background:#1b1f24;color:#e6e8eb;border-radius:10px;padding:14px 15px;overflow:auto;
+           font-size:13.5px;margin:9px 0;font-family:"SF Mono",Consolas,monospace;white-space:pre;}
+  code.inline{background:#eef0f2;border:1px solid var(--line2);border-radius:5px;padding:1px 6px;
+              color:var(--brand-d);font-family:Consolas,monospace;font-size:13.5px;}
+
+  /* 文档查看弹窗 */
+  .modal{display:none;position:fixed;inset:0;background:rgba(15,18,22,.45);z-index:50;
+         align-items:center;justify-content:center;padding:32px;}
+  .modal.show{display:flex;}
+  .modal-box{background:#fff;border-radius:14px;max-width:780px;width:100%;max-height:84vh;
+             display:flex;flex-direction:column;box-shadow:0 24px 60px rgba(0,0,0,.28);overflow:hidden;}
+  .modal-head{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;
+              padding:16px 20px;border-bottom:1px solid var(--line);}
+  .modal-head .mt{font-weight:700;font-size:16px;color:var(--ink);}
+  .modal-head .ms{font-size:13px;color:var(--muted);margin-top:3px;}
+  .modal-body{padding:18px 22px;overflow:auto;white-space:pre-wrap;line-height:1.85;
+              font-size:15.5px;color:var(--ink);}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">
+    <span class="dot"></span>
+    <div>
+      <h1>知识库 Agent</h1>
+      <div class="sub">语义检索 · 流式 RAG · MCP 工具</div>
+    </div>
+  </div>
+  <div class="pipe">bge-m3 召回 → bge-reranker 精排 → DeepSeek-V3 流式生成（SSE）</div>
+</header>
+
+<div class="wrap">
+  <!-- 左栏 -->
+  <div class="col-side">
+    <div class="card">
+      <h2>知识库</h2>
+      <div id="kbList"></div>
+      <div class="row" style="margin-top:11px;">
+        <input id="newKbName" placeholder="新建知识库名称" />
+        <button onclick="createKb()" style="flex:0 0 auto;">新建</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:22px;">
+      <h2>上传内容 <span class="tag" id="curKbName">未选择库</span></h2>
+      <div class="stack">
+        <input id="docTitle" placeholder="标题，如：卡兹克《xxx》" />
+        <textarea id="docContent" placeholder="直接粘贴文本内容…"></textarea>
+        <button onclick="addText()" style="width:100%;">文本入库</button>
+      </div>
+      <hr class="divider" />
+      <input type="file" id="docFile" accept=".txt,.md,.pdf,.doc,.docx,.png,.jpg,.jpeg" style="display:none;" />
+      <div class="drop" id="dropzone" onclick="document.getElementById('docFile').click()">
+        <div class="ic">📎</div>
+        <div class="dz-main">拖拽文件到这里，或点击选择</div>
+        <div class="dz-sub">.txt / .md 直读；PDF / Word / 图片走 TextIn 解析</div>
+        <div class="dz-file" id="dzFile"></div>
+      </div>
+      <button class="ghost" onclick="uploadFile()" style="width:100%;margin-top:12px;">⬆ 上传文件入库</button>
+      <div id="docList" style="margin-top:15px;"></div>
+    </div>
+  </div>
+
+  <!-- 右栏 -->
+  <div class="col-main">
+    <div class="card">
+      <h2>相关性检索 <span class="tag">语义 + 流式</span></h2>
+      <div class="search-row">
+        <input id="queryBox" placeholder="试试：微信小程序该不该 AI 化？／ 红烧肉怎么做？" onkeydown="if(event.key==='Enter')doSearch()" />
+        <button onclick="doSearch()">检索</button>
+      </div>
+      <label class="scope"><input type="checkbox" id="allKb" /> 跨全部知识库检索（不勾则只搜左侧选中的库）</label>
+
+      <div class="field">
+        <div class="field-label">命中来源</div>
+        <div id="sources"><div class="empty">检索后，命中的文章片段（标题 + 相关度 + 原文）会显示在这里。</div></div>
+      </div>
+      <div class="field">
+        <div class="field-label">回答 · DeepSeek-V3 流式生成</div>
+        <div id="answer"><span class="empty">输入问题点检索，回答将在此逐字生成；知识库中没有的内容会如实回答“未找到”。</span></div>
+      </div>
+    </div>
+
+    <!-- 使用说明 -->
+    <details>
+      <summary>📖 使用说明（clone 下来怎么跑）</summary>
+      <div class="inner">
+        <ol class="steps">
+          <li><b>配置：</b>复制 <code class="inline">.env.example</code> 为 <code class="inline">.env</code>，填入硅基流动 key（必填）。TextIn 凭证可选——不填则只支持 txt / md / 直接粘贴文本。</li>
+          <li><b>安装：</b><code class="inline">pip install -r requirements.txt</code></li>
+          <li><b>启动：</b><code class="inline">uvicorn app.main:app</code>，浏览器打开 <code class="inline">http://localhost:8000/</code> 即本页。</li>
+          <li><b>建库 → 选中 → 上传：</b>左侧新建知识库，点选它，再粘贴文本或上传 txt/md/PDF/Word 入库。</li>
+          <li><b>检索：</b>右侧输入问题，看「命中来源」（含原文片段）+ 逐字流式生成的回答。</li>
+          <li><b>验证语义检索：</b>上传两篇主题不同的文章，搜一个文中<b>没出现</b>的同义词，仍能命中相关文章，即为语义命中而非关键词匹配。</li>
+        </ol>
+      </div>
+    </details>
+
+    <!-- 接入 Agent -->
+    <details>
+      <summary>🔌 接入 Agent（把检索能力作为 MCP 工具）</summary>
+      <div class="inner">
+        检索能力已封装为 <b>MCP server</b>，可被 Claude Desktop / Cursor / Claude Code 调用，无需“安装软件”，只需登记本服务。
+        <p style="margin:12px 0 4px;"><b>方式一　Claude Desktop / Cursor</b>（路径换成你本机绝对路径）：</p>
+        <pre class="code" id="mcpConf">{
+  "mcpServers": {
+    "kb-agent": {
+      "command": "python",
+      "args": ["D:\\Dev\\kb-agent\\mcp_server.py"]
+    }
+  }
+}</pre>
+        <button class="ghost mini" id="copyBtn" onclick="copyMcp()">📋 复制配置</button>
+        <p style="margin:12px 0 4px;"><b>方式二　Claude Code（一行命令）</b>：</p>
+        <pre class="code">claude mcp add kb-agent -- python D:\Dev\kb-agent\mcp_server.py</pre>
+        <p style="margin:12px 0 0;">保存并重启后，Agent 即拥有 <code class="inline">search_knowledge_base</code> / <code class="inline">list_knowledge_bases</code> / <code class="inline">add_text_to_kb</code> 三个工具。对它说「帮我查微信小程序 AI 化有哪些不同观点」，它会自动检索本地知识库并作答。</p>
+      </div>
+    </details>
+  </div>
+</div>
+
+<!-- 文档查看弹窗 -->
+<div id="docModal" class="modal" onclick="if(event.target===this)closeDoc()">
+  <div class="modal-box">
+    <div class="modal-head">
+      <div><div class="mt" id="docModalTitle"></div><div class="ms" id="docModalMeta"></div></div>
+      <button class="ghost mini" onclick="closeDoc()">关闭 ✕</button>
+    </div>
+    <div class="modal-body" id="docModalBody"></div>
+  </div>
+</div>
+
+<script>
+let curKb = null;
+
+function showFile(){
+  const f = document.getElementById('docFile').files;
+  document.getElementById('dzFile').textContent = f.length ? '已选择：' + f[0].name : '';
+}
+function initDropzone(){
+  const dz = document.getElementById('dropzone'), inp = document.getElementById('docFile');
+  inp.addEventListener('change', showFile);
+  ['dragenter','dragover'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.add('over'); }));
+  ['dragleave','drop'].forEach(ev => dz.addEventListener(ev, e => { e.preventDefault(); e.stopPropagation(); dz.classList.remove('over'); }));
+  dz.addEventListener('drop', e => { if (e.dataTransfer.files.length) { inp.files = e.dataTransfer.files; showFile(); } });
+}
+
+function esc(s){ return (s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+function snip(t, n=180){ t = (t||'').replace(/\s+/g,' ').trim(); return t.length > n ? t.slice(0,n) + '…' : t; }
+function reEsc(s){ return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
+function hl(text, terms){
+  let t = esc(text);
+  for (const term of terms){
+    if (term && term.length >= 1){
+      try { t = t.replace(new RegExp(reEsc(esc(term)), 'g'), m => `<mark>${m}</mark>`); } catch(e){}
+    }
+  }
+  return t;
+}
+
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  if (!r.ok) { const e = await r.json().catch(()=>({detail:r.statusText})); throw new Error(e.detail || r.statusText); }
+  return r.json();
+}
+
+async function loadKbs() {
+  const data = await api('/api/kb?page=1&page_size=100');
+  const box = document.getElementById('kbList');
+  box.innerHTML = '';
+  data.items.forEach(kb => {
+    const div = document.createElement('div');
+    div.className = 'item' + (curKb === kb.id ? ' active' : '');
+    div.innerHTML = `<div><div class="nm">《${esc(kb.name)}》</div><div class="meta">${kb.doc_count} 篇 · id=${kb.id}</div></div>` +
+                    `<button class="ghost mini" onclick="event.stopPropagation();delKb(${kb.id})">删</button>`;
+    div.onclick = () => selectKb(kb.id, kb.name);
+    box.appendChild(div);
+  });
+  if (!data.items.length) box.innerHTML = '<p class="hint">还没有知识库，先在下方新建一个。</p>';
+}
+
+async function selectKb(id, name) {
+  curKb = id;
+  document.getElementById('curKbName').textContent = '当前：《' + name + '》';
+  await loadKbs(); await loadDocs();
+}
+
+async function createKb() {
+  const name = document.getElementById('newKbName').value.trim();
+  if (!name) return;
+  try { const kb = await api('/api/kb', {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+        document.getElementById('newKbName').value=''; await selectKb(kb.id, kb.name); }
+  catch(e){ alert(e.message); }
+}
+
+async function delKb(id) {
+  if (!confirm('删除该知识库及其所有文档？')) return;
+  await api('/api/kb/'+id, {method:'DELETE'});
+  if (curKb === id) { curKb = null; document.getElementById('curKbName').textContent='未选择库'; document.getElementById('docList').innerHTML=''; }
+  await loadKbs();
+}
+
+async function addText() {
+  if (!curKb) return alert('请先在左侧选择/新建知识库');
+  const title = document.getElementById('docTitle').value.trim();
+  const content = document.getElementById('docContent').value.trim();
+  if (!title || !content) return alert('标题和内容都要填');
+  try { const r = await api(`/api/kb/${curKb}/documents/text`, {method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({title,content})});
+        document.getElementById('docTitle').value=''; document.getElementById('docContent').value='';
+        alert(`入库成功：${r.chunks} 个分块`); await loadKbs(); await loadDocs(); }
+  catch(e){ alert(e.message); }
+}
+
+async function uploadFile() {
+  if (!curKb) return alert('请先在左侧选择/新建知识库');
+  const f = document.getElementById('docFile').files[0];
+  if (!f) return alert('请选择文件');
+  const fd = new FormData(); fd.append('file', f);
+  try { const r = await api(`/api/kb/${curKb}/documents/upload`, {method:'POST',body:fd});
+        alert(`入库成功：${r.title}（${r.chunks} 个分块）`); document.getElementById('docFile').value=''; showFile();
+        await loadKbs(); await loadDocs(); }
+  catch(e){ alert('上传失败：' + e.message); }
+}
+
+async function loadDocs() {
+  if (!curKb) return;
+  const data = await api(`/api/kb/${curKb}/documents?page=1&page_size=100`);
+  document.getElementById('docList').innerHTML =
+    data.items.map(d => `<div class="item" onclick="viewDoc(${d.id})" title="点击查看全文"><div><div class="nm">《${esc(d.title)}》</div><div class="meta">${d.source_type} · ${d.chunk_count} 块 · 点击查看</div></div>
+      <button class="ghost mini" onclick="event.stopPropagation();delDoc(${d.id})">删</button></div>`).join('')
+    || '<p class="hint">该库暂无文档</p>';
+}
+
+async function delDoc(id){ await api('/api/documents/'+id,{method:'DELETE'}); await loadKbs(); await loadDocs(); }
+
+async function viewDoc(id){
+  const m = document.getElementById('docModal');
+  document.getElementById('docModalTitle').textContent = '加载中…';
+  document.getElementById('docModalMeta').textContent = '';
+  document.getElementById('docModalBody').textContent = '';
+  m.classList.add('show');
+  try {
+    const d = await api('/api/documents/' + id);
+    document.getElementById('docModalTitle').textContent = '《' + d.title + '》';
+    document.getElementById('docModalMeta').textContent = `${d.source_type} · ${d.char_count} 字 · ${d.chunk_count} 块`;
+    document.getElementById('docModalBody').textContent = d.content || '（无内容）';
+  } catch(e) {
+    document.getElementById('docModalTitle').textContent = '出错';
+    document.getElementById('docModalBody').textContent = '加载失败：' + e.message;
+  }
+}
+function closeDoc(){ document.getElementById('docModal').classList.remove('show'); }
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeDoc(); });
+
+async function doSearch() {
+  const q = document.getElementById('queryBox').value.trim();
+  if (!q) return alert('请输入检索内容');
+  const ans = document.getElementById('answer');
+  const srcBox = document.getElementById('sources');
+  ans.textContent = ''; srcBox.innerHTML = '<div class="empty">检索中…</div>'; ans.classList.add('blink');
+
+  const terms = q.split(/\s+/).filter(Boolean);
+  const all = document.getElementById('allKb').checked;
+  let url = '/api/search/stream?q=' + encodeURIComponent(q);
+  if (!all && curKb) url += '&kb_id=' + curKb;
+
+  let resp;
+  try { resp = await fetch(url); }
+  catch(e){ ans.classList.remove('blink'); ans.textContent = '⚠️ 请求失败：' + e.message; srcBox.innerHTML=''; return; }
+
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  while (true) {
+    const {done, value} = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, {stream:true});
+    const events = buf.split('\n\n');
+    buf = events.pop();
+    for (const evt of events) {
+      const ev = (evt.match(/^event: (.*)$/m)||[])[1];
+      const dataLine = (evt.match(/^data: (.*)$/m)||[])[1];
+      if (!ev || dataLine === undefined) continue;
+      let data; try { data = JSON.parse(dataLine); } catch(e){ continue; }
+      if (ev === 'sources') {
+        srcBox.innerHTML = data.length
+          ? data.map((s,i)=>`<div class="src">
+               <div class="src-h"><span class="src-t">${i+1}. 《${esc(s.title)}》</span><span class="pill">相关度 ${(+s.score).toFixed(3)}</span></div>
+               <div class="src-body">${hl(snip(s.snippet), terms)}</div>
+             </div>`).join('')
+          : '<div class="empty">（无命中——知识库里没有相关内容）</div>';
+      } else if (ev === 'token') {
+        ans.textContent += data;
+      } else if (ev === 'error') {
+        ans.classList.remove('blink'); ans.textContent = '⚠️ ' + data.message;
+      }
+    }
+  }
+  ans.classList.remove('blink');
+}
+
+function copyMcp(){
+  const txt = document.getElementById('mcpConf').textContent;
+  navigator.clipboard.writeText(txt).then(()=>{
+    const b = document.getElementById('copyBtn'); const o = b.textContent;
+    b.textContent = '✅ 已复制'; setTimeout(()=> b.textContent = o, 1500);
+  }).catch(()=> alert('复制失败，请手动选择复制'));
+}
+
+loadKbs();
+initDropzone();
+</script>
+</body>
+</html>

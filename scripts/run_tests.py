@@ -7,10 +7,12 @@
 import os
 import sys
 
-sys.path.insert(0, "D:/Dev/kb-agent")
+# 以脚本位置定位项目根目录（scripts/ 的上一级），不写死绝对路径
+_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, _ROOT)
 from app import config, db, retriever, llm  # noqa
 
-CORPUS = "D:/Dev/kb-agent/test-corpus"
+CORPUS = os.path.join(_ROOT, "test-corpus")
 
 # (标签, 知识库, 相对路径)
 DOCS = [
@@ -182,9 +184,10 @@ def main():
     log(f"- 不存在kb_id=9999：db.kb_exists(9999)={db.kb_exists(9999)} → 应为 False（API层据此返回404）")
     log("")
 
-    with open("D:/Dev/kb-agent/联调结果.md", "w", encoding="utf-8") as f:
+    out_path = os.path.join(_ROOT, "联调结果.md")
+    with open(out_path, "w", encoding="utf-8") as f:
         f.write("# 联调自动测试结果\n\n" + "\n".join(R))
-    print("DONE -> 联调结果.md")
+    print("DONE -> " + out_path)
 
 
 if __name__ == "__main__":
